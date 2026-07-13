@@ -13,15 +13,15 @@ public class Json {
     }
 
     public static JsonNode parse(String jsonSrc) throws JsonProcessingException {
-        return myObjectMapper.readTree(jsonSrc);
+        return getDefaultObjectMapper().readTree(jsonSrc);
     }
 
     public static <T> T fromJson(JsonNode node, Class<T> toClass) throws JsonProcessingException {
-        return myObjectMapper.treeToValue(node, toClass);
+        return getDefaultObjectMapper().treeToValue(node, toClass);
     }
 
     public static JsonNode toJson(Object obj) {
-        return myObjectMapper.valueToTree(obj);
+        return getDefaultObjectMapper().valueToTree(obj);
     }
 
     public static String stringify(Object o) throws JsonProcessingException {
@@ -33,7 +33,7 @@ public class Json {
     }
 
     private static String generateJson(Object o, boolean pretty) throws JsonProcessingException {
-        ObjectWriter objwriter = myObjectMapper.writer();
+        ObjectWriter objwriter = getDefaultObjectMapper().writer();
         if (pretty) {
             objwriter = objwriter.with(SerializationFeature.INDENT_OUTPUT);
         }
