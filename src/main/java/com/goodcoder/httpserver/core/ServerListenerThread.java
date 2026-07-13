@@ -32,19 +32,9 @@ public class ServerListenerThread extends Thread {
 
                 Socket socket = serverSocket.accept();
                 logger.info("Connection accepted from : " + socket.getInetAddress());
-                InputStream inputStream = socket.getInputStream();
-                OutputStream outputStream = socket.getOutputStream();
-
-                String html = "<html><head><title>simple page</title></head><body><h1>Kida Jatta, chlda fer server!<h1></body></html>";
-                final String CRLF = "\r\n";
-                String response = "HTTP/1.1 200 OK" + CRLF + "Content-Length: " + html.getBytes().length + CRLF +//Header
-                        CRLF + html + CRLF + CRLF; //body
-                outputStream.write(response.getBytes());
-                inputStream.close();
-                outputStream.close();
-                socket.close();
+                HttpConnectionWorkerThread httpConnectionWorkerThread = new HttpConnectionWorkerThread(socket);
+                httpConnectionWorkerThread.run();
                 logger.info("Request completed");
-
                 // }
 
                 //handle later
