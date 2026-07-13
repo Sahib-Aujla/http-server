@@ -24,11 +24,18 @@ public class HttpConnectionWorkerThread extends Thread {
             inputStream = socket.getInputStream();
             outputStream = socket.getOutputStream();
 
+            int in_byte;
+            while ((in_byte = inputStream.read()) >= 0) {
+                System.out.print((char) in_byte);
+            }
+
+
             String html = "<html><head><title>simple page</title></head><body><h1>Kida Jatta, chlda fer server!<h1></body></html>";
             final String CRLF = "\r\n";
             String response = "HTTP/1.1 200 OK" + CRLF + "Content-Length: " + html.getBytes().length + CRLF +//Header
                     CRLF + html + CRLF + CRLF; //body
             outputStream.write(response.getBytes());
+            logger.info("Request sent back");
 
         } catch (Exception e) {
             throw new RuntimeException(e);
