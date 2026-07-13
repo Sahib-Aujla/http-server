@@ -43,6 +43,13 @@ public class ServerListenerThread extends Thread {
 
         } catch (Exception e) {
             throw new RuntimeException(e);
+        } finally {
+            if (serverSocket != null) {
+                try {
+                    serverSocket.close();
+                } catch (IOException e) {
+                }
+            }
         }
 
     }
