@@ -70,6 +70,10 @@ public class HttpParser {
                 processingBuffer.delete(0, processingBuffer.length());
             } else {
                 processingBuffer.append((char) _byte);
+                //check the length of the buffer, if larger than the HTTP max length than not implemeneted error
+                if(processingBuffer.length()>HttpMethod.MAX_LENGTH){
+                    throw new HttpParsingException(HttpStatusCode.CLIENT_ERROR_501_BAD_REQUEST);
+                }
             }
         }
     }
