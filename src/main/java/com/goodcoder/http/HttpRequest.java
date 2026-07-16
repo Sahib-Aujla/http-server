@@ -15,7 +15,10 @@ public class HttpRequest extends HttpMessage {
         return requestTarget;
     }
 
-    public void setRequestTarget(String requestTarget) {
+    public void setRequestTarget(String requestTarget) throws HttpParsingException {
+        if (requestTarget == null || requestTarget.isEmpty()) {
+            throw new HttpParsingException(HttpStatusCode.CLIENT_ERROR_500_BAD_REQUEST);
+        }
         this.requestTarget = requestTarget;
     }
 
