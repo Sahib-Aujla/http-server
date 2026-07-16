@@ -23,8 +23,14 @@ public class HttpRequest extends HttpMessage {
         return method;
     }
 
-    public void setMethod(String method) {
-        this.method = HttpMethod.valueOf(method);
+    public void setMethod(String method) throws HttpParsingException {
+        for (HttpMethod httpMethod : HttpMethod.values()) {
+            if (method.equals(httpMethod.name())) {
+                this.method = HttpMethod.valueOf(method);
+                return;
+            }
+        }
+        throw new HttpParsingException(HttpStatusCode.CLIENT_ERROR_501_BAD_REQUEST);
     }
 
     public String getHttpVersion() {
