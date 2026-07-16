@@ -47,7 +47,10 @@ public class HttpParser {
                 _byte = inputStreamReader.read();
                 if (_byte == LF) {
                     logger.info("Requesting Buffer Line LF: " + processingBuffer);
-
+                    if (!methodParsed || !requestTargetParsed) {
+                        //empty request line
+                        throw new HttpParsingException(HttpStatusCode.CLIENT_ERROR_400_BAD_REQUEST);
+                    }
                     return;
                 }
             }
@@ -61,17 +64,18 @@ public class HttpParser {
                     }
                     logger.info("Requesting METHOD Buffer Line: " + processingBuffer);
                     methodParsed = true;
-                }
-                if (!requestTargetParsed) {
+                } else if (!requestTargetParsed) {
                     logger.info("Requesting REQUEST Buffer Line: " + processingBuffer);
                     requestTargetParsed = true;
+                } else {
+                    throw new HttpParsingException(HttpStatusCode.CLIENT_ERROR_400_BAD_REQUEST);
                 }
                 logger.info("Requesting Buffer Line: " + processingBuffer);
                 processingBuffer.delete(0, processingBuffer.length());
             } else {
                 processingBuffer.append((char) _byte);
                 //check the length of the buffer, if larger than the HTTP max length than not implemeneted error
-                if(processingBuffer.length()>HttpMethod.MAX_LENGTH){
+                if (processingBuffer.length() > HttpMethod.MAX_LENGTH) {
                     throw new HttpParsingException(HttpStatusCode.CLIENT_ERROR_501_BAD_REQUEST);
                 }
             }
