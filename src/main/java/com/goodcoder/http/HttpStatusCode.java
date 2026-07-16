@@ -10,8 +10,7 @@ public enum HttpStatusCode {
     //server error
     CLIENT_ERROR_500_BAD_REQUEST(500, "Internal Server Error"),
     CLIENT_ERROR_501_BAD_REQUEST(501, "Not Implemented"),
-
-    ;
+    CLIENT_ERROR_505_HTTP_VERSION_NOT_SUPPORTED(505, "Http Version Not Supporteed");
 
 
     public final int STATUS_CODE;
