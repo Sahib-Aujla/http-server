@@ -41,6 +41,10 @@ public class HttpRequest extends HttpMessage {
         throw new HttpParsingException(HttpStatusCode.CLIENT_ERROR_501_BAD_REQUEST);
     }
 
+    public HttpVersion getBestCompatibleVersion() {
+        return bestCompatibleHttpVersion;
+    }
+
     public String getHttpVersion() {
         return originalHttpVersion;
     }
@@ -52,6 +56,7 @@ public class HttpRequest extends HttpMessage {
             throw new HttpParsingException(HttpStatusCode.CLIENT_ERROR_505_HTTP_VERSION_NOT_SUPPORTED);
         }
     }
+
 
     public void addHeader(String fieldName, String fieldValue) {
         headers.put(fieldName.toLowerCase(), fieldValue);
