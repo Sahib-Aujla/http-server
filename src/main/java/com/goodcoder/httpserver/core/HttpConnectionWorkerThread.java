@@ -1,5 +1,7 @@
 package com.goodcoder.httpserver.core;
 
+import com.goodcoder.http.HttpParser;
+import com.goodcoder.http.HttpRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -11,6 +13,7 @@ import java.net.Socket;
 public class HttpConnectionWorkerThread extends Thread {
     private Socket socket;
     private static Logger logger = LoggerFactory.getLogger(HttpConnectionWorkerThread.class);
+    private HttpParser httpParser = new HttpParser();
 
     public HttpConnectionWorkerThread(Socket socket) {
         this.socket = socket;
@@ -23,11 +26,10 @@ public class HttpConnectionWorkerThread extends Thread {
         try {
             inputStream = socket.getInputStream();
             outputStream = socket.getOutputStream();
+            //send the input stream to http parser
 
-            int in_byte;
-            while ((in_byte = inputStream.read()) >= 0) {
-                System.out.print((char) in_byte);
-            }
+
+            HttpRequest request = httpParser.parseHttpRequest(inputStream);
 
 
             String html = "<html><head><title>simple page</title></head><body><h1>Kida Jatta, chlda fer server!<h1></body></html>";
