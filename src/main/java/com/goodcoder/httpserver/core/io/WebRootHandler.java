@@ -11,6 +11,7 @@ public class WebRootHandler {
 
     public WebRootHandler(String webRootPath) throws WebRootNotFoundException {
         webRoot = new File(webRootPath);
+        System.out.println("Webroot path::  " + webRootPath);
         if (!webRoot.exists() || !webRoot.isDirectory()) {
             throw new WebRootNotFoundException("Webroot provided does not exist or is not a folder");
         }
@@ -37,6 +38,7 @@ public class WebRootHandler {
     }
 
     public String getFileMimePath(String relativePath) throws FileNotFoundException {
+
         if (checkIfEndsWithSlash(relativePath)) {
             relativePath += "index.html"; //default file, later to be modified
         }

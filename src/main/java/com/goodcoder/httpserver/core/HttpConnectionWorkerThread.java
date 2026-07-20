@@ -70,11 +70,14 @@ public class HttpConnectionWorkerThread extends Thread {
 
 
     private HttpResponse handleRequest(HttpRequest request) {
+
         switch (request.getMethod()) {
             case GET:
                 logger.info("Mehtod GET:  Request ");
+                return handleGetRequest(request, true);
             case HEAD:
                 logger.info("Method HEAD:  Request ");
+                return handleGetRequest(request, false);
             default:
                 //send not implemented
                 return new HttpResponse.Builder().httpVersion(request.getBestCompatibleVersion().LITERAL)
@@ -92,6 +95,7 @@ public class HttpConnectionWorkerThread extends Thread {
                     .addHeader(HttpHeaderName.CONTENT_TYPE.headerName, webRootHandler.getFileMimePath(request.getRequestTarget()));
 
             if (setMessageBody) {
+                logger.warn("Request target ", request.getRequestTarget());
                 byte[] messageBody = webRootHandler.getFileByteArrayData(request.getRequestTarget());
                 builder.addHeader(HttpHeaderName.CONTENT_LENGTH.headerName, String.valueOf(messageBody.length))
                         .messageBody(messageBody);
