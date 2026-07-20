@@ -1,383 +1,197 @@
-# HTTP Server
+# Java Multithreaded HTTP/1.1 Server
 
-A multithreaded HTTP/1.1 server written from scratch in Java to understand how web servers process requests internally.
-
-Instead of relying on frameworks like Spring Boot or Netty, this project implements the complete request lifecycle using Java sockets, request parsing, response construction, and concurrent connection handling.
-
-Current implementation focuses on correctness, readability, and HTTP fundamentals rather than production performance.
-
----
+A small HTTP/1.1 server implemented in Java from the ground up. It handles raw TCP sockets, parses requests, and builds compliant responses without using frameworks. The focus is on **correct HTTP semantics** and **code clarity**, with a clean architecture and unit-tested parsing. This project is educational—demonstrating how servers like Tomcat or Netty work internally—rather than aiming for production performance.
 
 ## Features
 
-- HTTP/1.1 Request Parsing
-- Concurrent request handling using worker threads
-- Static file serving
-- GET support
-- HEAD support
-- MIME type detection
-- Builder Pattern for HTTP response creation
-- Proper HTTP status codes
-- Exception-based error handling
-- Modular architecture
+- **HTTP/1.1 Request Parsing:** Manual parsing of start-line and headers, producing an immutable `HttpRequest`. Invalid syntax yields a `400 Bad Request`.
+- **Concurrent Handling:** One thread per connection (`ServerSocket` → listener → worker threads). Simple thread-per-connection model (no thread pool) for clarity.
+- **Static File Serving:** `WebRootHandler` reads files from the web root, detects MIME types (via file extension), and handles missing files gracefully.
+- **Supported Methods:** `GET`, `HEAD` (server *must* support GET/HEAD). Other methods return `501 Not Implemented` or `405 Method Not Allowed`.
+- **Response Construction:** Uses a **Builder pattern** for `HttpResponse`, setting version, status, headers, and optional body. Example usage:
+  ```java
+  HttpResponse res = new HttpResponse.Builder()
+      .httpVersion("HTTP/1.1")
+      .statusCode(HttpStatusCode.OK)
+      .addHeader("Content-Type", "text/html")
+      .messageBody("<h1>Hello</h1>".getBytes())
+      .build();
+  ```  
+- **Unit Testing:** JUnit 5 tests for `HttpParser` (valid requests, malformed cases, header parsing, large inputs, etc). Parsing logic is fully decoupled from sockets, allowing fast test coverage of RFC7230 rules.
 
 ---
 
-# Request Lifecycle
+## Architecture
 
-```text
-                Client (Browser)
-                       │
-                       │ TCP Connection
-                       ▼
-             HttpServer (ServerSocket)
-                       │
-             accepts incoming socket
-                       ▼
-             ServerListener Thread
-                       │
-             creates worker thread
-                       ▼
-      HttpConnectionWorkerThread
-                       │
-          reads InputStream
-                       ▼
-                HttpParser
-                       │
-        validates HTTP request
-        parses:
-          • Method
-          • Target
-          • Version
-          • Headers
-                       ▼
-                HttpRequest
-                       │
-          routes request method
-                       ▼
-           GET / HEAD Handler
-                       │
-             WebRootHandler
-          locate requested file
-                       │
-       read bytes + determine MIME
-                       ▼
-             HttpResponse.Builder
-                       │
-      constructs HTTP compliant response
-                       ▼
-             OutputStream
-                       │
-                       ▼
-                 Browser
+```mermaid
+sequenceDiagram
+  participant B as Browser
+  participant SS as ServerSocket
+  participant SL as ServerListener
+  participant W as HttpConnectionWorkerThread
+  participant P as HttpParser
+  participant WH as WebRootHandler
+  participant R as HttpResponse.Builder
+
+  B->>SS: TCP connect & send HTTP request
+  SS->>SL: new connection (accept)
+  SL->>W: spawn worker thread
+  W->>P: parse request stream
+  P-->>W: HttpRequest
+  W->>WH: load requested file
+  WH-->>W: file bytes & MIME
+  W->>R: build response
+  W->>B: write HTTP response
+```
+
+All major components are separated: networking (`ServerSocket`, threads), parsing (`HttpParser`), file I/O (`WebRootHandler`), and response logic (`HttpResponse.Builder`).
+
+---
+
+## Package Structure
+Important files listed only
+```
+src/main/java
+├── http
+│   ├── HttpParser.java        (parses request line & headers)
+│   ├── HttpRequest.java       (immutable request object)
+│   ├── HttpResponse.java      (builder for responses)
+│   ├── HttpStatusCode.java    (enum of status codes)
+│   └── HttpVersion.java       (HTTP version enum)
+│
+├── httpserver
+│   ├── HttpServer.java        (main, opens ServerSocket)
+│   ├── ServerListener.java    (accept loop, spawns workers)
+│   ├── HttpConnectionWorkerThread.java (handles one request)
+│   └── io
+│       └── WebRootHandler.java (finds and reads files, MIME)
+│
+└── test
+    └── HttpParserTest.java    (JUnit tests for parsing logic)
 ```
 
 ---
 
-# Architecture
+## Component Responsibilities
 
-```text
-                    +----------------+
-                    |   HttpServer   |
-                    +----------------+
-                            │
-                            ▼
-               +------------------------+
-               | ServerListener Thread  |
-               +------------------------+
-                            │
-          accepts incoming client socket
-                            │
-          creates one worker per request
-                            ▼
-        +----------------------------------+
-        | HttpConnectionWorkerThread       |
-        +----------------------------------+
-                 │                  │
-                 │                  │
-                 ▼                  ▼
-          HttpParser         WebRootHandler
-                 │                  │
-                 ▼                  ▼
-            HttpRequest      Static Resources
-                 │
-                 ▼
-         Request Dispatcher
-                 │
-        GET / HEAD Routing
-                 │
-                 ▼
-      HttpResponse.Builder
-                 │
-                 ▼
-          Serialized Response
-                 │
-                 ▼
-              OutputStream
+- **HttpServer:** Listens on a port and starts `ServerListener`. Owning class for the server lifecycle.
+- **ServerListener:** In a loop, calls `ServerSocket.accept()`, then immediately creates a new `HttpConnectionWorkerThread` for each client socket. Never processes requests itself, enabling concurrency.
+- **HttpConnectionWorkerThread:** Core worker that processes one HTTP request. Its steps:
+    1. Read `InputStream` from the client socket.
+    2. Invoke `HttpParser.parseHttpRequest(stream)`. On parse error, return **400 Bad Request**.
+    3. Inspect `HttpRequest.method`: if `GET`/`HEAD`, call `handleGetRequest()`, else return `501` or `405`.
+    4. In `handleGetRequest()`: use `WebRootHandler` to locate the file. If not found, return **404 Not Found**; on I/O error, return **500 Internal Server Error**.
+    5. If serving content, set `Content-Type` (MIME) and `Content-Length`; for `HEAD`, omit the body.
+    6. Call `.build()` on `HttpResponse.Builder` and write the bytes to `OutputStream`.
+    7. **Finally:** close streams and socket in `finally` block to avoid resource leaks (always executed). Catch exceptions to prevent thread crash: on unexpected errors, log and return `500` (don’t throw unchecked).
+
+- **HttpParser:** Reads the request line and headers per RFC7230. It splits the start-line (method, target, version), then reads headers until an empty line. It validates syntax (e.g. proper SP and CRLF). Malformed input leads to throwing a checked exception, handled in the worker. By design, parser **does not depend on networking**, making it easily unit-testable.
+
+- **HttpRequest:** Immutable data class holding method (enum), request-target (path), HTTP version, and headers map. No internal behavior beyond getters. Used by worker to decide routing and response.
+
+- **WebRootHandler:** Takes a request target (URI path) and maps it to a file under a configured web root directory. It checks for path traversal (`../`) and normalizes the path (e.g. using `java.nio.file.Path.normalize()`) to prevent escaping the web root. It returns file bytes and MIME type (e.g. "text/html"). Throws `FileNotFoundException` (404) or `IOException` (500) as needed.
+
+- **HttpResponse.Builder:** Follows the Builder pattern to assemble responses. The builder methods set HTTP version, status code, and headers, then optionally attach a message body (byte array). On `build()`, it serializes the status line, headers, and body into the final byte array. This separation mirrors common frameworks (e.g. Spring, JAX-RS).
+
+---
+
+## Supported Methods & Status Codes
+
+| Method |  Supported? |  
+|--------|:-------:|  
+| GET    |      ✅  |  
+| HEAD   |      ✅  |  
+| Others| ❌ (501) |
+
+| Status Code | Meaning                        |
+|------------|--------------------------------|
+| **200**     | OK (successful request)        |
+| **400**     | Bad Request (syntax error)     |
+| **404**     | Not Found (file missing)       |
+| **405**     | Method Not Allowed (unsupported) |
+| **414**     | URI Too Long (target too long) |
+| **500**     | Internal Server Error (I/O failure) |
+| **501**     | Not Implemented (unsupported method) |
+
+Note: Per HTTP/1.1, servers *must* support GET and HEAD. If a non-GET/HEAD method is received, reply **501**; if a known method is not allowed on this resource, reply **405** and include an `Allow: GET, HEAD` header.
+
+---
+
+## Example HTTP Exchange
+
+**Request:**
+```
+GET /index.html HTTP/1.1
+Host: localhost
+User-Agent: curl/8.0
+Accept: */*
+
+```
+
+**Response:**
+```
+HTTP/1.1 200 OK
+Content-Type: text/html
+Content-Length: 25
+
+<html><body>Home</body></html>
 ```
 
 ---
 
-# Component Responsibilities
+## Build & Run
 
-## HttpServer
+Use Maven 
 
-- Opens the ServerSocket
-- Starts the listener thread
-- Owns server lifecycle
+- **Maven:**
+  ```bash
+  mvn clean package
+  java -jar target/http-server.jar 8080  # port as arg
+  ```  
+  Run tests: `mvn test`.
 
----
-
-## ServerListener
-
-Responsible for accepting client connections.
-
-Instead of processing requests itself, it immediately delegates work to a new worker thread, allowing multiple clients to connect simultaneously.
+On startup, the server listens on the specified port (default 8080 if none given) and serves files from `src/main/resources/webroot` (configurable).
 
 ---
 
-## HttpConnectionWorkerThread
+## Testing
 
-The core execution unit of the server.
+JUnit 5 is used. Key tests include:
 
-Responsibilities:
+- **HttpParserTest:** Parses valid request lines and headers (including CRLF-only lines), and asserts failures on malformed inputs (missing parts, bad characters).
+- **HeaderParserTest:** Edge cases for header fields, folded headers, and large number of headers.
 
-- Read socket InputStream
-- Parse HTTP request
-- Route request by HTTP method
-- Access requested resource
-- Build HTTP response
-- Write response to OutputStream
-- Close resources safely
-
-Each incoming connection gets its own worker thread.
+Because `HttpParser` is separate from sockets, tests use a `ByteArrayInputStream` to feed raw HTTP strings. This ensures full coverage of the parsing logic against RFC7230 rules.
 
 ---
 
-## HttpParser
+## Design Decisions
 
-Responsible for converting raw bytes into a structured HttpRequest object.
-
-The parser validates the request according to HTTP syntax and extracts
-
-- Method
-- Request Target
-- HTTP Version
-- Headers
-
-Separating parsing from networking keeps responsibilities isolated and improves testability.
+- **Thread-per-Connection:** Chosen for simplicity and clarity. Each client gets a dedicated `Thread`. This is easy to implement and understand, but does not scale to thousands of connections (no thread pool or async). Future improvements could include a fixed thread pool or non-blocking I/O (NIO).
+- **Builder Pattern:** Enables clean assembly of responses. It prevents partial construction errors and separates header/body logic.
+- **Separation of Concerns:** Parsing, networking, and file I/O are distinct components. This makes the codebase easier to maintain and test (e.g. the parser can be tested without opening sockets).
+- **HTTP Compliance:** Returns correct status codes per RFC7231/7230 (e.g. 400 on malformed requests, 501/405 for methods). GET/HEAD support is guaranteed.
+- **Unit Testing:** Emphasized testing the parser in isolation (using JUnit 5) to ensure request lines and headers follow HTTP spec. This yields confidence in request handling.
 
 ---
 
-## HttpRequest
+## Best Practices & Security
 
-Represents an immutable parsed HTTP request.
-
-Contains
-
-- Method
-- Version
-- Request Target
-- Headers
-
-This object becomes the contract used by the rest of the server.
+- **Resource Cleanup:** All `Socket` streams are closed in `finally` blocks to avoid leaks. Uncaught exceptions in workers are caught and logged; the server thread keeps running.
+- **Input Validation:** Request targets are normalized to prevent directory traversal. Reject targets with `../` or empty paths. (E.g. using `Paths.get().normalize()`).
+- **Timeouts:** It’s advisable to set `ServerSocket.setSoTimeout(...)` to avoid hanging on accept/read. Similarly, limit the maximum header/request size.
+- **Error Handling:** Don’t expose stack traces to clients. Return appropriate HTTP errors (400, 404, 500) instead of raw exceptions.
+- **No Directory Listing:** By default, do not allow browsing directories; only serve files. Return 404 if the target is a directory without an index file.
 
 ---
 
-## WebRootHandler
+## Troubleshooting
 
-Abstracts filesystem access.
-
-Responsibilities
-
-- Locate requested file
-- Read file bytes
-- Determine MIME type
-- Throw meaningful exceptions
-
-The networking layer never directly interacts with the filesystem.
+- **Port in Use:** “Address already in use” means the port is occupied. Try a different port or kill the existing process.
+- **Missing Files:** A 404 means the file under `webroot` was not found. Check the path and web root directory.
+- **Long Requests:** If the server hangs on a client, consider increasing socket timeout or client read timeout.
+- **Unsupported Method:** Seeing 501? The server only supports GET/HEAD. Try a supported method.
 
 ---
 
-## HttpResponse Builder
-
-Responses are created using the Builder Pattern.
-
-Instead of constructing responses manually, the builder assembles
-
-- Status Line
-- Headers
-- Message Body
-
-before serializing the response into bytes.
-
-Example flow
-
-```
-Builder
-    .httpVersion(...)
-    .statusCode(...)
-    .addHeader(...)
-    .messageBody(...)
-    .build();
-```
-
-This mirrors how many production frameworks construct HTTP responses internally.
-
----
-
-# Supported Methods
-
-| Method | Status |
-|---------|--------|
-| GET | ✅ |
-| HEAD | ✅ |
-
----
-
-# Supported Status Codes
-
-| Code | Description |
-|------|-------------|
-| 200 | OK |
-| 404 | Not Found |
-| 500 | Internal Server Error |
-| 501 | Not Implemented |
-
----
-
-# Error Handling
-
-The server separates protocol errors from filesystem errors.
-
-### 404
-
-Returned when the requested resource does not exist.
-
-### 500
-
-Returned when a resource exists but cannot be read.
-
-### 501
-
-Returned for unsupported HTTP methods.
-
----
-
-# Concurrency Model
-
-The server follows a thread-per-connection model.
-
-```text
-Client 1
-            \
-Client 2 -----> Worker Thread
-            /
-Client 3
-
-Client 4 ----------> Worker Thread
-
-Client 5 ----------> Worker Thread
-```
-
-Advantages
-
-- Simple architecture
-- Easy to understand
-- Demonstrates Java threading fundamentals
-- Independent request processing
-
----
-
-# Design Principles
-
-- Single Responsibility Principle
-- Separation of Concerns
-- Builder Pattern
-- Exception-driven error handling
-- Immutable request representation
-- Modular package structure
-
----
-
-# HTTP Request Flow
-
-```
-Socket
-
-↓
-
-InputStream
-
-↓
-
-HttpParser
-
-↓
-
-HttpRequest
-
-↓
-
-Method Dispatch
-
-↓
-
-WebRootHandler
-
-↓
-
-HttpResponse.Builder
-
-↓
-
-OutputStream
-
-↓
-
-Browser
-```
-
----
-
-# Future Improvements
-
-- POST
-- PUT
-- DELETE
-- Persistent Connections (Keep-Alive)
-- Thread Pool Executor
-- HTTP/1.1 Connection Reuse
-- Chunked Transfer Encoding
-- Directory Listing
-- Request Logging
-- Access Logs
-- Virtual Hosts
-- Routing Engine
-- HTTPS
-- HTTP/2
-
----
-
-# Learning Outcomes
-
-This project demonstrates understanding of
-
-- Java Networking
-- TCP Socket Programming
-- HTTP/1.1 Protocol
-- Request Parsing
-- Response Serialization
-- Concurrent Programming
-- Builder Pattern
-- Exception Handling
-- Static File Serving
-- Thread-per-Connection Server Design
-
----
-
-## Project Goal
-
-The objective was not to recreate an enterprise web server, but to understand the mechanics hidden behind frameworks like Spring Boot, Tomcat, and Netty.
-
-By implementing the request lifecycle manually—from raw TCP sockets to HTTP-compliant responses—the project provides a deeper understanding of how web servers process, validate, route, and respond to client requests.
+**References:** HTTP/1.1 RFC 7230/7231 semantics
