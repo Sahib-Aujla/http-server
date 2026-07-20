@@ -2,6 +2,7 @@ package com.goodcoder.httpserver.core;
 
 import com.goodcoder.http.HttpParser;
 import com.goodcoder.http.HttpRequest;
+import com.goodcoder.httpserver.core.io.WebRootHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,9 +15,11 @@ public class HttpConnectionWorkerThread extends Thread {
     private Socket socket;
     private static Logger logger = LoggerFactory.getLogger(HttpConnectionWorkerThread.class);
     private HttpParser httpParser = new HttpParser();
+    private WebRootHandler webRootHandler;
 
-    public HttpConnectionWorkerThread(Socket socket) {
+    public HttpConnectionWorkerThread(Socket socket, WebRootHandler webRootHandler) {
         this.socket = socket;
+        this.webRootHandler = webRootHandler;
     }
 
     @Override
@@ -31,6 +34,7 @@ public class HttpConnectionWorkerThread extends Thread {
 
             HttpRequest request = httpParser.parseHttpRequest(inputStream);
 
+            
 
             String html = "<html><head><title>simple page</title></head><body><h1>Kida Jatta, chlda fer server!<h1></body></html>";
             final String CRLF = "\r\n";
