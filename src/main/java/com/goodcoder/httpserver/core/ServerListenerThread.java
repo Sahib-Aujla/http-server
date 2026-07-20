@@ -1,6 +1,8 @@
 package com.goodcoder.httpserver.core;
 
 import com.goodcoder.httpserver.HttpServer;
+import com.goodcoder.httpserver.core.io.WebRootHandler;
+import com.goodcoder.httpserver.core.io.WebRootNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,11 +17,14 @@ public class ServerListenerThread extends Thread {
 
     private ServerSocket serverSocket;
     private int port;
-    private String webport;
+    private String webroot;
 
-    public ServerListenerThread(int port, String webport) throws IOException {
+    private WebRootHandler webRootHandler;
+
+    public ServerListenerThread(int port, String webroot) throws IOException, WebRootNotFoundException {
         this.port = port;
-        this.webport = webport;
+        this.webroot = webroot;
+        this.webRootHandler = new WebRootHandler(webroot);
         serverSocket = new ServerSocket(this.port);
     }
 

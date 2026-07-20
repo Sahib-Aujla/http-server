@@ -3,6 +3,7 @@ package com.goodcoder.httpserver;
 import com.goodcoder.httpserver.config.Configuration;
 import com.goodcoder.httpserver.config.ConfigurationManager;
 import com.goodcoder.httpserver.core.ServerListenerThread;
+import com.goodcoder.httpserver.core.io.WebRootNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,8 +24,10 @@ public class HttpServer {
         try {
             ServerListenerThread serverListenerThread = new ServerListenerThread(conf.getPort(), conf.getWebroot());
             serverListenerThread.run();
-        } catch (IOException e) {
+        } catch (IOException e ) {
 
+            throw new RuntimeException(e);
+        } catch (WebRootNotFoundException e) {
             throw new RuntimeException(e);
         }
 
